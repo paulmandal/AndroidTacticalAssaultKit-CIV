@@ -145,7 +145,7 @@ class TakDevPlugin implements Plugin<Project> {
 
         debugPrintln(tuple)
 
-        def isAndroidLibrary = project.plugins.getPlugin('com.android.library') != null
+        def isAndroidLibrary = project.plugins.hasPlugin('com.android.library')
 
         if (isAndroidLibrary) {
             project.android.libraryVariants.all { variant ->
