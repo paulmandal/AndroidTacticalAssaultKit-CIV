@@ -145,52 +145,67 @@ class TakDevPlugin implements Plugin<Project> {
 
         debugPrintln(tuple)
 
-        project.android.applicationVariants.all { variant ->
+        def isAndroidLibrary = project.plugins.getPlugin('com.android.library') != null
 
-            Dependency dep = project.dependencies.create(project.files(tuple.apiJar.absolutePath))
-            project.dependencies.add("${variant.name}CompileOnly", dep)
-            project.dependencies.add("test${variant.name.capitalize()}Implementation", dep)
+        if (isAndroidLibrary) {
+            project.android.libraryVariants.all { variant ->
+                configureProject(project, tuple, variant, isAndroidLibrary)
+            }
+        } else {
+            project.android.applicationVariants.all { variant ->
+                configureProject(project, tuple, variant, isAndroidLibrary)
+            }
+        }
+    }
 
-            def compileProvider = project.tasks.named("compile${variant.name.capitalize()}JavaWithJavac")
-            compileProvider.configure({
-                doFirst {
-                    def mappingName = "proguard-${variant.flavorName}-${variant.buildType.name}-mapping.txt"
-                    def mappingFqn = tuple.mapping.absolutePath
-                    if (new File(mappingFqn).exists()) {
-                        project.copy {
-                            from mappingFqn
-                            into project.buildDir
-                            rename {
-                                return mappingName
-                            }
-                        }
-                    } else {
-                        def mappingFile = project.file(mappingFqn)
-                        if (!mappingFile.getParentFile().exists())
-                            mappingFile.getParentFile().mkdirs()
-                        project.file(mappingFqn).text = ""
-                        println("${variant.name} => WARNING: no mapping file could be established, obfuscating just the plugin to work with the development core")
-                    }
-                    System.setProperty("atak.proguard.mapping", mappingFqn)
-                }
-            })
+    void configureProject(Project project, PathTuple tuple, variant, boolean isAndroidLibrary) {
+        Dependency dep = project.dependencies.create(project.files(tuple.apiJar.absolutePath))
+        project.dependencies.add("${variant.name}CompileOnly", dep)
+        project.dependencies.add("test${variant.name.capitalize()}Implementation", dep)
 
-            // inject keystore before validate signing
-            def signingProvider = project.tasks.named("validateSigning${variant.name.capitalize()}")
-            signingProvider.configure({
-                doFirst {
-                    // Keystore
-                    def storeName = 'android_keystore'
+        def compileProvider = project.tasks.named("compile${variant.name.capitalize()}JavaWithJavac")
+        compileProvider.configure({
+            doFirst {
+                def mappingName = "proguard-${variant.flavorName}-${variant.buildType.name}-mapping.txt"
+                def mappingFqn = tuple.mapping.absolutePath
+                if (new File(mappingFqn).exists()) {
                     project.copy {
-                        from tuple.keystore.absolutePath
+                        from mappingFqn
                         into project.buildDir
                         rename {
-                            return storeName
+                            return mappingName
                         }
                     }
+                } else {
+                    def mappingFile = project.file(mappingFqn)
+                    if (!mappingFile.getParentFile().exists())
+                        mappingFile.getParentFile().mkdirs()
+                    project.file(mappingFqn).text = ""
+                    println("${variant.name} => WARNING: no mapping file could be established, obfuscating just the plugin to work with the development core")
                 }
-            })
+                System.setProperty("atak.proguard.mapping", mappingFqn)
+            }
+        })
+
+        if (isAndroidLibrary) {
+            return
         }
+
+        // inject keystore before validate signing
+        def signingProvider = project.tasks.named("validateSigning${variant.name.capitalize()}")
+        signingProvider.configure({
+            doFirst {
+                // Keystore
+                def storeName = 'android_keystore'
+                project.copy {
+                    from tuple.keystore.absolutePath
+                    into project.buildDir
+                    rename {
+                        return storeName
+                    }
+                }
+            }
+        })
     }
 
     void configureMaven(Project project) {
